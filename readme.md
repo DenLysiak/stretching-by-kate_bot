@@ -1,1 +1,1 @@
-this is telegram bot
+this is telegram bot to play stored videos
