@@ -53,10 +53,6 @@ bot.command('start', (ctx) => {
         [telegraf_1.Markup.button.callback('💫 Мотивація від мене:', 'motivation')],
     ]));
 });
-// bot.on('video', (ctx) => {
-//   const video = ctx.message.video;
-//   ctx.reply(`Received file. File ID is:\n\`${video.file_id}\``, { parse_mode: 'Markdown' })
-// });
 bot.action('work_out', (ctx) => {
     let videoCounter = 0;
     const videoButtons = videoList.map((video) => {
