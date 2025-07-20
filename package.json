@@ -1,0 +1,28 @@
+{
+  "name": "kate-gorban-stretching_bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for stretching, with video folders",
+  "license": "ISC",
+  "author": "Denys Lysiak",
+  "type": "commonjs",
+  "main": "dist/App.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/src/App.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/dotenv": "^6.1.1",
+    "@types/node": "^24.0.14",
+    "tslint": "^5.20.1",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.0",
+    "telegraf": "^4.16.3"
+  },
+  "engines": {
+    "node": "24.4.0",
+    "npm": "11.4.2"
+  }
+}
