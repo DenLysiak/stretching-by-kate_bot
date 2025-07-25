@@ -301,6 +301,8 @@ bot.action(/play_video:(.+)/, async (ctx) => {
 
   const sendVideo = await ctx.replyWithVideo(fileId, {
     caption: 'Ось ваше тренування!',
+    protect_content: true,
+    supports_streaming: true,
   });
 
   lastVideoMessageMap.set(chatId, sendVideo.message_id);
