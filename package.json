@@ -8,17 +8,26 @@
   "main": "dist/App.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/src/App.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node --openssl-legacy-provider dist/src/App.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "download-db": "ts-node src/googleDriveService.ts"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/dotenv": "^6.1.1",
     "@types/node": "^24.0.14",
+    "ts-node": "^10.9.2",
     "tslint": "^5.20.1",
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "better-sqlite3": "^12.2.0",
     "dotenv": "^17.2.0",
+    "fs": "^0.0.1-security",
+    "google-auth-library": "^10.1.0",
+    "googleapis": "^154.0.0",
+    "path": "^0.12.7",
+    "sqlite": "^5.1.1",
     "telegraf": "^4.16.3"
   },
   "engines": {
