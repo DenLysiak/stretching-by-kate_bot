@@ -10,7 +10,6 @@ const base64EncodedServiceAccount = process.env.GOOGLE_SERVICE_ACCOUNT_BASE64!;
 const decodedServiceAccount = Buffer.from(base64EncodedServiceAccount, 'base64').toString('utf-8');
 const CREDENTIALS_JSON = JSON.parse(decodedServiceAccount);
 
-
 if (!CREDENTIALS_JSON) throw new Error('❌ GOOGLE_SERVICE_ACCOUNT не знайдено');
 
 let credentials;

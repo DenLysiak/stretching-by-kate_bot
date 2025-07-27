@@ -1,7 +1,7 @@
 import { Context, Markup, Telegraf } from 'telegraf';
 import dotenv from 'dotenv';
 import * as fs from 'fs';
-import { VideoType } from './types';
+import { MotivationType, VideoType } from './types';
 import { deletePreviousVideo } from './deletePreviousVideo';
 import { addUserIfNotExists, getAllUsers, isUserAllowed, removeUser } from './userServices';
 import { sendWelcomeMessage } from './sendWelcome';
@@ -9,11 +9,13 @@ import path from 'path';
 import { getDB, initDB } from '../data/db';
 import Database from 'better-sqlite3';
 import { downloadDatabaseFromDrive } from './googleDriveService';
+import { getRandomNumber } from './getRandomNum';
 
 dotenv.config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN as string);
 const videoList = JSON.parse(fs.readFileSync('./data/videoAPI.json', 'utf-8'));
+const motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 const fileIdMap = new Map<string, string>();
 const lastVideoMessageMap = new Map<number, number>();
 const dbPath = path.resolve(__dirname, '../../data/users.db');
@@ -323,7 +325,10 @@ bot.action('about', debounceAction(async (ctx) => {
 }));
 
 bot.action('motivation', debounceAction(async (ctx) => {
-    await ctx.editMessageText('Неважливо, з чого ти починаєш — важливо, що ти починаєш.\n\nТвоє тіло вже дякує тобі за цей крок. Розтягуючи м’язи, ти розширюєш свої межі — не лише фізично, а й внутрішньо. Подаруй собі цю подорож до себе. Ти заслуговуєш бути вільною/вільним у кожному русі 💫',
+  const randomNumber = getRandomNumber(1, motivationMessageList.length);
+  const message: MotivationType = [...motivationMessageList].find((m: MotivationType) => m.messageId === randomNumber)!;
+
+  await ctx.editMessageText(`${message.messageText ? message.messageText : 'Тягнись, поки не втягнешся. І тоді тягнись ще!'} 💫`,
     Markup.inlineKeyboard([
       [Markup.button.callback('⮐ Повернутись до меню', 'return_to_menu')]
     ]));

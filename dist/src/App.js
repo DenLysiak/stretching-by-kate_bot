@@ -46,9 +46,11 @@ const sendWelcome_1 = require("./sendWelcome");
 const path_1 = __importDefault(require("path"));
 const db_1 = require("../data/db");
 const googleDriveService_1 = require("./googleDriveService");
+const getRandomNum_1 = require("./getRandomNum");
 dotenv_1.default.config();
 const bot = new telegraf_1.Telegraf(process.env.BOT_TOKEN);
 const videoList = JSON.parse(fs.readFileSync('./data/videoAPI.json', 'utf-8'));
+const motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 const fileIdMap = new Map();
 const lastVideoMessageMap = new Map();
 const dbPath = path_1.default.resolve(__dirname, '../../data/users.db');
@@ -271,6 +273,8 @@ bot.action(/play_video:(.+)/, async (ctx) => {
     await (0, deletePreviousVideo_1.deletePreviousVideo)(chatId, ctx.telegram, lastVideoMessageMap);
     const sendVideo = await ctx.replyWithVideo(fileId, {
         caption: 'Ось ваше тренування!',
+        protect_content: true,
+        supports_streaming: true,
     });
     lastVideoMessageMap.set(chatId, sendVideo.message_id);
 });
@@ -285,7 +289,9 @@ bot.action('about', debounceAction(async (ctx) => {
     ]));
 }));
 bot.action('motivation', debounceAction(async (ctx) => {
-    await ctx.editMessageText('Неважливо, з чого ти починаєш — важливо, що ти починаєш.\n\nТвоє тіло вже дякує тобі за цей крок. Розтягуючи м’язи, ти розширюєш свої межі — не лише фізично, а й внутрішньо. Подаруй собі цю подорож до себе. Ти заслуговуєш бути вільною/вільним у кожному русі 💫', telegraf_1.Markup.inlineKeyboard([
+    const randomNumber = (0, getRandomNum_1.getRandomNumber)(1, motivationMessageList.length);
+    const message = [...motivationMessageList].find((m) => m.messageId === randomNumber);
+    await ctx.editMessageText(`${message.messageText ? message.messageText : 'Тягнись, поки не втягнешся. І тоді тягнись ще!'} 💫`, telegraf_1.Markup.inlineKeyboard([
         [telegraf_1.Markup.button.callback('⮐ Повернутись до меню', 'return_to_menu')]
     ]));
 }));
