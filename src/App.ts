@@ -3,13 +3,14 @@ import dotenv from 'dotenv';
 import * as fs from 'fs';
 import { MotivationType, VideoType } from './types';
 import { deletePreviousVideo } from './deletePreviousVideo';
-import { addUserIfNotExists, getAllUsers, isUserAllowed, removeUser } from './userServices';
+import { addUserIfNotExists, getAllUsers, isUserAllowed, removeUser, deleteExpiredUsers, notifyExpiringUsers } from './userServices';
 import { sendWelcomeMessage } from './sendWelcome';
 import path from 'path';
 import { getDB, initDB } from '../data/db';
 import Database from 'better-sqlite3';
-import { downloadDatabaseFromDrive } from './googleDriveService';
+import { downloadDatabaseFromDrive, uploadDatabaseToDrive } from './googleDriveService';
 import { getRandomNumber } from './getRandomNum';
+import cron from 'node-cron';
 
 dotenv.config();
 
@@ -49,7 +50,20 @@ function debounceAction(handler: (ctx: Context) => Promise<void>, delay = 750) {
   };
 }
 
-const ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
+export const ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
+
+// Every day at 00:00
+cron.schedule('0 0 * * *', () => {
+  console.log('🕛 Запускається перевірка прострочених користувачів...');
+
+  deleteExpiredUsers(bot);
+});
+
+cron.schedule('0 9 * * *', () => {
+  console.log('📬 Перевірка на користувачів із закінченням доступу...');
+
+  notifyExpiringUsers(bot);
+});
 
 bot.command('start', async (ctx) => {
   const id = ctx.from.id;
@@ -147,6 +161,7 @@ bot.action(/approve_(\d+)_(permanent|temporary)/, async (ctx) => {
 
   // Видаляємо запит з очікування
   const userInfo = pendingRequests.get(userId);
+  
   if (userInfo) {
     try {
       await bot.telegram.deleteMessage(userInfo.chatId, userInfo.messageId);
@@ -162,10 +177,49 @@ bot.action(/approve_(\d+)_(permanent|temporary)/, async (ctx) => {
   // Повідомлення користувачу
   if (!result.includes('вже доданий')) {
     await bot.telegram.sendMessage(userId, '✅ Ваш доступ до бота підтверджено!');
+  
     await sendWelcomeMessage(bot.telegram, userId);
   } else {
     await bot.telegram.sendMessage(userId, '⚠️ Ви вже маєте доступ до бота.');
   }
+});
+
+bot.action(/^request_extend_(\d+)$/, async (ctx) => {
+  const userId = Number(ctx.match[1]);
+
+  if (ctx.from.id !== userId) {
+    return ctx.answerCbQuery('⛔ Це не ваше повідомлення.');
+  }
+
+  await ctx.answerCbQuery('⏳ Запит надіслано адміну.');
+
+  await bot.telegram.sendMessage(
+    ADMIN, 
+    `📨 Користувач @${ctx.from.username ?? 'без імені'} (ID: ${userId}) просить подовжити доступ.`, 
+    Markup.inlineKeyboard([
+      Markup.button.callback('✅ Подовжити на 90 днів', `approve_extend_${userId}`),
+      Markup.button.callback('❌ Відмовити', `deny_extend_${userId}`)
+    ])
+  );
+});
+
+bot.action(/^approve_extend_(\d+)$/, async (ctx) => {
+  const userId = Number(ctx.match[1]);
+
+  const newEndDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  const stmt = db.prepare(`UPDATE allowed_users SET end_date = ? WHERE user_id = ?`);
+  stmt.run(newEndDate, userId);
+
+  await ctx.editMessageText(`✅ Доступ користувачу (ID: ${userId}) подовжено до ${new Date(newEndDate).toLocaleDateString('uk-UA')}.`);
+  await bot.telegram.sendMessage(userId, `✅ Ваш доступ подовжено на 90 днів!`);
+  await uploadDatabaseToDrive();
+});
+
+bot.action(/^deny_extend_(\d+)$/, async (ctx) => {
+  const userId = Number(ctx.match[1]);
+
+  await ctx.editMessageText(`❌ Відмовлено у подовженні доступу користувачу (ID: ${userId}).`);
+  await bot.telegram.sendMessage(userId, `❌ Адміністратор відмовив у подовженні доступу.`);
 });
 
 bot.command('users', async (ctx) => {
@@ -178,7 +232,7 @@ bot.command('users', async (ctx) => {
   }
 
   for (const user of users) {
-    const dateNormalized = user.date_added.split('T')[0];
+    const dateNormalized = user.date_added.split('T')[0] || new Date().toLocaleDateString('uk-UA');
     const endDateNormalized = user.end_date?.split('T')[0] || null;
 
     const text = `👤 <b>${user.first_name || ''} ${user.last_name || ''}</b>
@@ -362,7 +416,6 @@ bot.action('return_to_menu', debounceAction(async (ctx) => {
   try {
     console.log('🔽 Завантаження бази даних з Google Drive...');
     await downloadDatabaseFromDrive();
-    console.log('✅ Базу даних завантажено.');
   } catch (err) {
     console.warn('⚠️ Не вдалося завантажити базу з Google Drive. Створюємо нову.');
     initDB(dbPath);

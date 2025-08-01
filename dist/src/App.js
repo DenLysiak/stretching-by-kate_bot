@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.db = void 0;
+exports.ADMIN = exports.db = void 0;
 const telegraf_1 = require("telegraf");
 const dotenv_1 = __importDefault(require("dotenv"));
 const fs = __importStar(require("fs"));
@@ -47,6 +47,7 @@ const path_1 = __importDefault(require("path"));
 const db_1 = require("../data/db");
 const googleDriveService_1 = require("./googleDriveService");
 const getRandomNum_1 = require("./getRandomNum");
+const node_cron_1 = __importDefault(require("node-cron"));
 dotenv_1.default.config();
 const bot = new telegraf_1.Telegraf(process.env.BOT_TOKEN);
 const videoList = JSON.parse(fs.readFileSync('./data/videoAPI.json', 'utf-8'));
@@ -73,11 +74,20 @@ function debounceAction(handler, delay = 750) {
         await handler(ctx);
     };
 }
-const ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
+exports.ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
+// Every day at 00:00
+node_cron_1.default.schedule('0 0 * * *', () => {
+    console.log('🕛 Запускається перевірка прострочених користувачів...');
+    (0, userServices_1.deleteExpiredUsers)(bot);
+});
+node_cron_1.default.schedule('0 9 * * *', () => {
+    console.log('📬 Перевірка на користувачів із закінченням доступу...');
+    (0, userServices_1.notifyExpiringUsers)(bot);
+});
 bot.command('start', async (ctx) => {
     const id = ctx.from.id;
     const username = ctx.from.username;
-    if ((0, userServices_1.isUserAllowed)(id) || ADMIN === id) {
+    if ((0, userServices_1.isUserAllowed)(id) || exports.ADMIN === id) {
         return await (0, sendWelcome_1.sendWelcomeMessage)(ctx);
     }
     ctx.reply(`⛔️ Доступ до бота закрито.\n🆔 Ваш user ID: <code>${id}</code>\nUsername: @${username || 'немає'}`, { parse_mode: 'HTML' });
@@ -96,7 +106,7 @@ bot.action(/request_access_(\d+)/, async (ctx) => {
         return ctx.reply('⚠️ Це не ваш запит.');
     }
     ctx.reply('📩 Запит надіслано адміністраторам.');
-    bot.telegram.sendMessage(ADMIN, `📥 <b>Запит на доступ до бота:</b>\n\n👤 <b>Ім’я:</b> ${from.first_name} ${from.last_name || ''}\n🆔 <b>ID:</b> <code>${from.id}</code>\n🔗 <b>Username:</b> @${from.username || 'немає'}`, {
+    bot.telegram.sendMessage(exports.ADMIN, `📥 <b>Запит на доступ до бота:</b>\n\n👤 <b>Ім’я:</b> ${from.first_name} ${from.last_name || ''}\n🆔 <b>ID:</b> <code>${from.id}</code>\n🔗 <b>Username:</b> @${from.username || 'немає'}`, {
         parse_mode: 'HTML',
         reply_markup: {
             inline_keyboard: [
@@ -109,7 +119,7 @@ bot.action(/request_access_(\d+)/, async (ctx) => {
 });
 bot.action(/approve_(\d+)_(permanent|temporary)/, async (ctx) => {
     const adminId = ctx.from.id;
-    if (ADMIN !== adminId)
+    if (exports.ADMIN !== adminId)
         return ctx.reply('⛔️ Ви не адміністратор.');
     const userId = parseInt(ctx.match[1]);
     const permissionType = ctx.match[2];
@@ -167,15 +177,40 @@ bot.action(/approve_(\d+)_(permanent|temporary)/, async (ctx) => {
         await bot.telegram.sendMessage(userId, '⚠️ Ви вже маєте доступ до бота.');
     }
 });
+bot.action(/^request_extend_(\d+)$/, async (ctx) => {
+    const userId = Number(ctx.match[1]);
+    if (ctx.from.id !== userId) {
+        return ctx.answerCbQuery('⛔ Це не ваше повідомлення.');
+    }
+    await ctx.answerCbQuery('⏳ Запит надіслано адміну.');
+    await bot.telegram.sendMessage(exports.ADMIN, `📨 Користувач @${ctx.from.username ?? 'без імені'} (ID: ${userId}) просить подовжити доступ.`, telegraf_1.Markup.inlineKeyboard([
+        telegraf_1.Markup.button.callback('✅ Подовжити на 90 днів', `approve_extend_${userId}`),
+        telegraf_1.Markup.button.callback('❌ Відмовити', `deny_extend_${userId}`)
+    ]));
+});
+bot.action(/^approve_extend_(\d+)$/, async (ctx) => {
+    const userId = Number(ctx.match[1]);
+    const newEndDate = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+    const stmt = exports.db.prepare(`UPDATE allowed_users SET end_date = ? WHERE user_id = ?`);
+    stmt.run(newEndDate, userId);
+    await ctx.editMessageText(`✅ Доступ користувачу (ID: ${userId}) подовжено до ${new Date(newEndDate).toLocaleDateString('uk-UA')}.`);
+    await bot.telegram.sendMessage(userId, `✅ Ваш доступ подовжено на 90 днів!`);
+    await (0, googleDriveService_1.uploadDatabaseToDrive)();
+});
+bot.action(/^deny_extend_(\d+)$/, async (ctx) => {
+    const userId = Number(ctx.match[1]);
+    await ctx.editMessageText(`❌ Відмовлено у подовженні доступу користувачу (ID: ${userId}).`);
+    await bot.telegram.sendMessage(userId, `❌ Адміністратор відмовив у подовженні доступу.`);
+});
 bot.command('users', async (ctx) => {
-    if (ADMIN !== ctx.from.id)
+    if (exports.ADMIN !== ctx.from.id)
         return ctx.reply('⛔️ Доступ заборонено.');
     const users = (0, userServices_1.getAllUsers)();
     if (users.length === 0) {
         return ctx.reply('🕵🏼‍♂️ Немає жодного користувача.');
     }
     for (const user of users) {
-        const dateNormalized = user.date_added.split('T')[0];
+        const dateNormalized = user.date_added.split('T')[0] || new Date().toLocaleDateString('uk-UA');
         const endDateNormalized = user.end_date?.split('T')[0] || null;
         const text = `👤 <b>${user.first_name || ''} ${user.last_name || ''}</b>
       🆔 <code>${user.user_id}</code>
@@ -194,7 +229,7 @@ bot.command('users', async (ctx) => {
     }
 });
 bot.action(/delete_user_(\d+)/, async (ctx) => {
-    if (ADMIN !== ctx.from.id) {
+    if (exports.ADMIN !== ctx.from.id) {
         return ctx.answerCbQuery('⛔️ Ви не адміністратор.');
     }
     const userId = parseInt(ctx.match[1]);
@@ -232,7 +267,7 @@ bot.use(async (ctx, next) => {
         // Якщо немає info про користувача, просто пропускаємо
         return;
     }
-    if ((0, userServices_1.isUserAllowed)(userId) || ADMIN === userId) {
+    if ((0, userServices_1.isUserAllowed)(userId) || exports.ADMIN === userId) {
         // Дозволяємо продовжувати обробку
         return next();
     }
@@ -317,7 +352,6 @@ bot.action('return_to_menu', debounceAction(async (ctx) => {
     try {
         console.log('🔽 Завантаження бази даних з Google Drive...');
         await (0, googleDriveService_1.downloadDatabaseFromDrive)();
-        console.log('✅ Базу даних завантажено.');
     }
     catch (err) {
         console.warn('⚠️ Не вдалося завантажити базу з Google Drive. Створюємо нову.');
