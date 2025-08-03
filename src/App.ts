@@ -1,4 +1,4 @@
-import { Context, Markup, Telegraf } from 'telegraf';
+import { Markup, Telegraf } from 'telegraf';
 import dotenv from 'dotenv';
 import * as fs from 'fs';
 import { MotivationType, VideoType } from './types';
@@ -10,105 +10,26 @@ import { getDB, initDB } from '../data/db';
 import Database from 'better-sqlite3';
 import { downloadDatabaseFromDrive, uploadDatabaseToDrive } from './googleDriveService';
 import { getRandomNumber } from './getRandomNum';
-import cron from 'node-cron';
+import { debounceAction } from './debounceAction';
+import { startAllCronJobs, stopAllCronJobs } from './cron-jobs';
 
 dotenv.config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN as string);
 const videoList = JSON.parse(fs.readFileSync('./data/videoAPI.json', 'utf-8'));
-const motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 const fileIdMap = new Map<string, string>();
 const lastVideoMessageMap = new Map<number, number>();
 const dbPath = path.resolve(__dirname, '../../data/users.db');
 
+export const motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 export let db: Database.Database;
 
 // method to keep track of pending requests
 const pendingRequests = new Map<number, { chatId: number, messageId: number }>();
 
-// Set to track recent menu clicks to prevent spam
-const recentMenuClicks = new Set<number>();
-
-function debounceAction(handler: (ctx: Context) => Promise<void>, delay = 750) {
-  return async (ctx: Context) => {
-    const userId = ctx.from?.id;
-
-    if (!userId) {
-      return ctx.reply('❌ Не вдалося визначити ваш ID користувача.');
-    }
-
-    if (recentMenuClicks.has(userId)) {
-      return ctx.answerCbQuery('⏳ Зачекай трохи...');
-    }
-
-    recentMenuClicks.add(userId);
-    setTimeout(() => recentMenuClicks.delete(userId), delay);
-
-    await ctx.answerCbQuery();
-
-    await handler(ctx);
-  };
-}
-
 export const ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
 
-// Every day at 00:00 check for expired users
-const deleteExpiredJob = cron.schedule('0 0 * * *', async () => {
-  try {
-    console.log('🕛 Запускається перевірка прострочених користувачів...');
-
-    await deleteExpiredUsers(bot);
-
-    console.log('✅ Перевірка прострочених користувачів завершена.');
-  } catch (error) {
-    console.error('❌ Помилка під час видалення прострочених користувачів:', error);
-  }
-});
-
-// Every day at 09:00 notify users with expiring access
-const notifyJob = cron.schedule('0 9 * * *', async () => {
-  try {
-    console.log('📬 Перевірка на користувачів із закінченням доступу...');
-
-    await notifyExpiringUsers(bot);
-
-    console.log('✅ Перевірка на користувачів із закінченням доступу завершена.');
-  } catch (error) {
-    console.error('❌ Помилка під час перевірки прострочених користувачів:', error);
-  }
-});
-
-// Every Monday, Wednesday, and Friday at 10:00 send motivation message
-const motivationJob = cron.schedule('0 10 * * 1, 3, 5', async () => {
-  try {
-    const users = await getAllUsers();
-    const date = new Date().getDate();
-
-    const motivationMessage = motivationMessageList.find((m: MotivationType) => m.messageId === date);
-    const motivationText = motivationMessage?.messageText || 'Тягнись, поки не втягнешся. І тоді тягнись ще! 💫';
-
-    for (const user of users) {
-      bot.telegram.sendMessage(
-        user.user_id,
-       motivationText,
-        { parse_mode: 'HTML' }
-      ).catch(err => {
-        console.error(`❗ Не вдалося надіслати нагадування користувачу ${user.user_id}:`, err);
-      });
-    }
-
-    console.log('✅ Мотиваційне повідомлення розіслано');
-  } catch (error) {
-    console.error('❌ Помилка під час розсилки мотиваційних повідомлень:', error);
-  }
-});
-
-function stopAllCronJobs() {
-  deleteExpiredJob.stop();
-  notifyJob.stop();
-  motivationJob.stop();
-  console.log('🛑 Усі cron завдання зупинено.');
-}
+startAllCronJobs(bot);
 
 bot.command('start', async (ctx) => {
   const id = ctx.from.id;
@@ -481,18 +402,25 @@ bot.action('return_to_menu', debounceAction(async (ctx) => {
   console.log('🤖 Бот запущено!');
 })();
 
+// Handle graceful shutdown on SIGINT signal
 process.once('SIGINT', () => bot.stop('SIGINT'));
 
+// Handle graceful shutdown on SIGTERM signal
+// This will stop all cron jobs and the bot gracefully
+// It ensures that the bot and cron jobs are stopped properly before exiting
 process.once('SIGTERM', async () => {
     console.log('Received SIGTERM signal. Initiating graceful shutdown...');
     stopAllCronJobs();
 
     try {
         await bot.stop('SIGTERM');
+
         console.log('Bot and cron jobs have been stopped.');
+
         process.exit(0);
     } catch (error) {
         console.error('Error during bot shutdown:', error);
+
         process.exit(1);
     }
 });

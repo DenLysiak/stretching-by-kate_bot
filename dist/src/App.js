@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ADMIN = exports.db = void 0;
+exports.ADMIN = exports.db = exports.motivationMessageList = void 0;
 const telegraf_1 = require("telegraf");
 const dotenv_1 = __importDefault(require("dotenv"));
 const fs = __importStar(require("fs"));
@@ -47,80 +47,19 @@ const path_1 = __importDefault(require("path"));
 const db_1 = require("../data/db");
 const googleDriveService_1 = require("./googleDriveService");
 const getRandomNum_1 = require("./getRandomNum");
-const node_cron_1 = __importDefault(require("node-cron"));
+const debounceAction_1 = require("./debounceAction");
+const cron_jobs_1 = require("./cron-jobs");
 dotenv_1.default.config();
 const bot = new telegraf_1.Telegraf(process.env.BOT_TOKEN);
 const videoList = JSON.parse(fs.readFileSync('./data/videoAPI.json', 'utf-8'));
-const motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 const fileIdMap = new Map();
 const lastVideoMessageMap = new Map();
 const dbPath = path_1.default.resolve(__dirname, '../../data/users.db');
+exports.motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 // method to keep track of pending requests
 const pendingRequests = new Map();
-// Set to track recent menu clicks to prevent spam
-const recentMenuClicks = new Set();
-function debounceAction(handler, delay = 750) {
-    return async (ctx) => {
-        const userId = ctx.from?.id;
-        if (!userId) {
-            return ctx.reply('❌ Не вдалося визначити ваш ID користувача.');
-        }
-        if (recentMenuClicks.has(userId)) {
-            return ctx.answerCbQuery('⏳ Зачекай трохи...');
-        }
-        recentMenuClicks.add(userId);
-        setTimeout(() => recentMenuClicks.delete(userId), delay);
-        await ctx.answerCbQuery();
-        await handler(ctx);
-    };
-}
 exports.ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
-// Every day at 00:00 check for expired users
-const deleteExpiredJob = node_cron_1.default.schedule('0 0 * * *', async () => {
-    try {
-        console.log('🕛 Запускається перевірка прострочених користувачів...');
-        await (0, userServices_1.deleteExpiredUsers)(bot);
-        console.log('✅ Перевірка прострочених користувачів завершена.');
-    }
-    catch (error) {
-        console.error('❌ Помилка під час видалення прострочених користувачів:', error);
-    }
-});
-// Every day at 09:00 notify users with expiring access
-const notifyJob = node_cron_1.default.schedule('0 9 * * *', async () => {
-    try {
-        console.log('📬 Перевірка на користувачів із закінченням доступу...');
-        await (0, userServices_1.notifyExpiringUsers)(bot);
-        console.log('✅ Перевірка на користувачів із закінченням доступу завершена.');
-    }
-    catch (error) {
-        console.error('❌ Помилка під час перевірки прострочених користувачів:', error);
-    }
-});
-// Every Monday, Wednesday, and Friday at 10:00 send motivation message
-const motivationJob = node_cron_1.default.schedule('0 10 * * 1, 3, 5', async () => {
-    try {
-        const users = await (0, userServices_1.getAllUsers)();
-        const date = new Date().getDate();
-        const motivationMessage = motivationMessageList.find((m) => m.messageId === date);
-        const motivationText = motivationMessage?.messageText || 'Тягнись, поки не втягнешся. І тоді тягнись ще! 💫';
-        for (const user of users) {
-            bot.telegram.sendMessage(user.user_id, motivationText, { parse_mode: 'HTML' }).catch(err => {
-                console.error(`❗ Не вдалося надіслати нагадування користувачу ${user.user_id}:`, err);
-            });
-        }
-        console.log('✅ Мотиваційне повідомлення розіслано');
-    }
-    catch (error) {
-        console.error('❌ Помилка під час розсилки мотиваційних повідомлень:', error);
-    }
-});
-function stopAllCronJobs() {
-    deleteExpiredJob.stop();
-    notifyJob.stop();
-    motivationJob.stop();
-    console.log('🛑 Усі cron завдання зупинено.');
-}
+(0, cron_jobs_1.startAllCronJobs)(bot);
 bot.command('start', async (ctx) => {
     const id = ctx.from.id;
     const username = ctx.from.username;
@@ -323,7 +262,7 @@ bot.use(async (ctx, next) => {
         });
     }
 });
-bot.action('work_out', debounceAction(async (ctx) => {
+bot.action('work_out', (0, debounceAction_1.debounceAction)(async (ctx) => {
     let videoCounter = 0;
     const videoButtons = videoList.map((video) => {
         const shortId = `vid${videoCounter++}`;
@@ -352,24 +291,24 @@ bot.action(/play_video:(.+)/, async (ctx) => {
     });
     lastVideoMessageMap.set(chatId, sendVideo.message_id);
 });
-bot.action('benefits', debounceAction(async (ctx) => {
+bot.action('benefits', (0, debounceAction_1.debounceAction)(async (ctx) => {
     await ctx.editMessageText('Переваги програми:\n\n✅ Поступова побудова гнучкості — без болю, надривів та зайвого стресу\n✅ Поєднання стретчингу та м’яких силових елементів — для здорових суглобів і м’язів\n✅ Пояснення техніки, дихання і безпечного входження у пози\n✅ Можна тренуватись у зручному темпі та комфортній атмосфері\n✅ Підходить для занять вдома, тобі знадобляться лише килимок, йога блоки та рушник.', telegraf_1.Markup.inlineKeyboard([
         [telegraf_1.Markup.button.callback('⮐ Повернутись до меню', 'return_to_menu')]
     ]));
 }));
-bot.action('about', debounceAction(async (ctx) => {
+bot.action('about', (0, debounceAction_1.debounceAction)(async (ctx) => {
     await ctx.editMessageText('Ця програма підійде: \n\n🔹 Початківцям, які хочуть безпечно почати розвивати гнучкість\n🔹 Тим, хто відчуває напруження у спині, ногах, тазі — і прагне покращити самопочуття\n🔹 Танцівникам, фітнес-ентузіастам, спортсменам як додаток до основного тренінгу\n🔹 Усім, хто мріє про шпагати, легке тіло й гарну поставу', telegraf_1.Markup.inlineKeyboard([
         [telegraf_1.Markup.button.callback('⮐ Повернутись до меню', 'return_to_menu')]
     ]));
 }));
-bot.action('motivation', debounceAction(async (ctx) => {
-    const randomNumber = (0, getRandomNum_1.getRandomNumber)(1, motivationMessageList.length);
-    const message = [...motivationMessageList].find((m) => m.messageId === randomNumber);
+bot.action('motivation', (0, debounceAction_1.debounceAction)(async (ctx) => {
+    const randomNumber = (0, getRandomNum_1.getRandomNumber)(1, exports.motivationMessageList.length);
+    const message = [...exports.motivationMessageList].find((m) => m.messageId === randomNumber);
     await ctx.editMessageText(`${message.messageText ? message.messageText : 'Тягнись, поки не втягнешся. І тоді тягнись ще!'} 💫`, telegraf_1.Markup.inlineKeyboard([
         [telegraf_1.Markup.button.callback('⮐ Повернутись до меню', 'return_to_menu')]
     ]));
 }));
-bot.action('return_to_menu', debounceAction(async (ctx) => {
+bot.action('return_to_menu', (0, debounceAction_1.debounceAction)(async (ctx) => {
     const chatId = ctx.chat?.id;
     if (chatId) {
         await (0, deletePreviousVideo_1.deletePreviousVideo)(chatId, ctx.telegram, lastVideoMessageMap);
@@ -404,10 +343,14 @@ bot.action('return_to_menu', debounceAction(async (ctx) => {
     await bot.launch();
     console.log('🤖 Бот запущено!');
 })();
+// Handle graceful shutdown on SIGINT signal
 process.once('SIGINT', () => bot.stop('SIGINT'));
+// Handle graceful shutdown on SIGTERM signal
+// This will stop all cron jobs and the bot gracefully
+// It ensures that the bot and cron jobs are stopped properly before exiting
 process.once('SIGTERM', async () => {
     console.log('Received SIGTERM signal. Initiating graceful shutdown...');
-    stopAllCronJobs();
+    (0, cron_jobs_1.stopAllCronJobs)();
     try {
         await bot.stop('SIGTERM');
         console.log('Bot and cron jobs have been stopped.');
