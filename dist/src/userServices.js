@@ -68,16 +68,16 @@ async function deleteExpiredUsers(bot) {
     console.log(message);
     await bot.telegram.sendMessage(App_1.ADMIN, message);
 }
-function isUserAllowed(userId) {
+async function isUserAllowed(userId) {
     const stmt = App_1.db.prepare('SELECT 1 FROM allowed_users WHERE user_id = ?');
     return !!stmt.get(userId);
 }
-function getAllUsers() {
+async function getAllUsers() {
     const stmt = App_1.db.prepare('SELECT * FROM allowed_users');
     return stmt.all();
 }
 async function notifyExpiringUsers(bot) {
-    const users = getAllUsers();
+    const users = await getAllUsers();
     const now = new Date();
     for (const user of users) {
         if (user.permission_type !== 'temporary' || !user.end_date)

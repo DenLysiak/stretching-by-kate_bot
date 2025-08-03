@@ -100,20 +100,20 @@ export async function deleteExpiredUsers(bot: Telegraf): Promise<void> {
   await bot.telegram.sendMessage(ADMIN, message);
 }
 
-export function isUserAllowed(userId: number): boolean {
+export async function isUserAllowed(userId: number): Promise<boolean> {
   const stmt = db.prepare('SELECT 1 FROM allowed_users WHERE user_id = ?');
 
   return !!stmt.get(userId);
 }
 
-export function getAllUsers(): AllowedUser[] {
+export async function getAllUsers(): Promise<AllowedUser[]> {
   const stmt = db.prepare('SELECT * FROM allowed_users');
 
   return stmt.all() as AllowedUser[];
 }
 
 export async function notifyExpiringUsers(bot: Telegraf): Promise<void> {
-  const users = getAllUsers();
+  const users = await getAllUsers();
   const now = new Date();
 
   for (const user of users) {

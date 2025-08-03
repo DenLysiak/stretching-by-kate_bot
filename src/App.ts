@@ -52,24 +52,51 @@ function debounceAction(handler: (ctx: Context) => Promise<void>, delay = 750) {
 
 export const ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
 
-// Every day at 00:00
+// Every day at 00:00 check for expired users
 cron.schedule('0 0 * * *', () => {
   console.log('🕛 Запускається перевірка прострочених користувачів...');
 
   deleteExpiredUsers(bot);
 });
 
+// Every day at 09:00 notify users with expiring access
 cron.schedule('0 9 * * *', () => {
   console.log('📬 Перевірка на користувачів із закінченням доступу...');
 
   notifyExpiringUsers(bot);
 });
 
+cron.schedule('0 10 * * 1, 3, 5', async () => {
+  try {
+    const users = await getAllUsers();
+    const date = new Date().getDate();
+
+    const motivationMessage = motivationMessageList.find((m: MotivationType) => m.messageId === date);
+    const motivationText = motivationMessage?.messageText || 'Тягнись, поки не втягнешся. І тоді тягнись ще! 💫';
+
+    for (const user of users) {
+      bot.telegram.sendMessage(
+        user.user_id,
+       motivationText,
+        { parse_mode: 'HTML' }
+      ).catch(err => {
+        console.error(`❗ Не вдалося надіслати нагадування користувачу ${user.user_id}:`, err);
+      });
+    }
+
+    console.log('✅ Мотиваційне повідомлення розіслано');
+  } catch (error) {
+    console.error('❌ Помилка під час розсилки мотиваційних повідомлень:', error);
+  }
+});
+
 bot.command('start', async (ctx) => {
   const id = ctx.from.id;
   const username = ctx.from.username;
 
-  if (isUserAllowed(id) || ADMIN === id) {
+  const isAllowed = await isUserAllowed(id);
+
+  if (isAllowed || ADMIN === id) {
     return await sendWelcomeMessage(ctx);
   }
 
@@ -225,7 +252,7 @@ bot.action(/^deny_extend_(\d+)$/, async (ctx) => {
 bot.command('users', async (ctx) => {
   if (ADMIN !== ctx.from.id) return ctx.reply('⛔️ Доступ заборонено.');
 
-  const users = getAllUsers();
+  const users = await getAllUsers();
 
   if (users.length === 0) {
     return ctx.reply('🕵🏼‍♂️ Немає жодного користувача.');
@@ -300,7 +327,9 @@ bot.use(async (ctx, next) => {
     return;
   }
 
-  if (isUserAllowed(userId) || ADMIN === userId) {
+  const isAllowed = await isUserAllowed(userId);
+
+  if (isAllowed || ADMIN === userId) {
     // Дозволяємо продовжувати обробку
     return next();
   } else {

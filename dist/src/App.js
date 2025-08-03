@@ -75,19 +75,38 @@ function debounceAction(handler, delay = 750) {
     };
 }
 exports.ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
-// Every day at 00:00
+// Every day at 00:00 check for expired users
 node_cron_1.default.schedule('0 0 * * *', () => {
     console.log('🕛 Запускається перевірка прострочених користувачів...');
     (0, userServices_1.deleteExpiredUsers)(bot);
 });
+// Every day at 09:00 notify users with expiring access
 node_cron_1.default.schedule('0 9 * * *', () => {
     console.log('📬 Перевірка на користувачів із закінченням доступу...');
     (0, userServices_1.notifyExpiringUsers)(bot);
 });
+node_cron_1.default.schedule('0 10 * * 1, 3, 5', async () => {
+    try {
+        const users = await (0, userServices_1.getAllUsers)();
+        const date = new Date().getDate();
+        const motivationMessage = motivationMessageList.find((m) => m.messageId === date);
+        const motivationText = motivationMessage?.messageText || 'Тягнись, поки не втягнешся. І тоді тягнись ще! 💫';
+        for (const user of users) {
+            bot.telegram.sendMessage(user.user_id, motivationText, { parse_mode: 'HTML' }).catch(err => {
+                console.error(`❗ Не вдалося надіслати нагадування користувачу ${user.user_id}:`, err);
+            });
+        }
+        console.log('✅ Мотиваційне повідомлення розіслано');
+    }
+    catch (error) {
+        console.error('❌ Помилка під час розсилки мотиваційних повідомлень:', error);
+    }
+});
 bot.command('start', async (ctx) => {
     const id = ctx.from.id;
     const username = ctx.from.username;
-    if ((0, userServices_1.isUserAllowed)(id) || exports.ADMIN === id) {
+    const isAllowed = await (0, userServices_1.isUserAllowed)(id);
+    if (isAllowed || exports.ADMIN === id) {
         return await (0, sendWelcome_1.sendWelcomeMessage)(ctx);
     }
     ctx.reply(`⛔️ Доступ до бота закрито.\n🆔 Ваш user ID: <code>${id}</code>\nUsername: @${username || 'немає'}`, { parse_mode: 'HTML' });
@@ -205,7 +224,7 @@ bot.action(/^deny_extend_(\d+)$/, async (ctx) => {
 bot.command('users', async (ctx) => {
     if (exports.ADMIN !== ctx.from.id)
         return ctx.reply('⛔️ Доступ заборонено.');
-    const users = (0, userServices_1.getAllUsers)();
+    const users = await (0, userServices_1.getAllUsers)();
     if (users.length === 0) {
         return ctx.reply('🕵🏼‍♂️ Немає жодного користувача.');
     }
@@ -267,7 +286,8 @@ bot.use(async (ctx, next) => {
         // Якщо немає info про користувача, просто пропускаємо
         return;
     }
-    if ((0, userServices_1.isUserAllowed)(userId) || exports.ADMIN === userId) {
+    const isAllowed = await (0, userServices_1.isUserAllowed)(userId);
+    if (isAllowed || exports.ADMIN === userId) {
         // Дозволяємо продовжувати обробку
         return next();
     }
