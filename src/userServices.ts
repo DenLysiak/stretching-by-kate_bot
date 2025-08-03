@@ -2,6 +2,7 @@ import { Markup, Telegraf } from 'telegraf';
 import { ADMIN, db } from './App';
 import { uploadDatabaseToDrive } from './googleDriveService';
 
+// Interface representing a user in the allowed users list
 export interface AllowedUser {
   user_id: number;
   first_name: string | null;
@@ -12,6 +13,8 @@ export interface AllowedUser {
   end_date: string | null; // ISO date string or null if permanent
 }
 
+// Adds a user to the allowed users list if they do not already exist
+// Returns a message indicating success or if the user already exists
 export async function addUserIfNotExists(user: AllowedUser): Promise<string> {
   try {
     const check = db.prepare('SELECT user_id FROM allowed_users WHERE user_id = ?').get(user.user_id);
@@ -50,6 +53,8 @@ export async function addUserIfNotExists(user: AllowedUser): Promise<string> {
   }
 }
 
+// Removes a user from the allowed users list by user ID
+// Returns true if the user was removed, false if the user was not found
 export async function removeUser(userId: number): Promise<boolean> {
   const stmt = db.prepare('DELETE FROM allowed_users WHERE user_id = ?');
   const result = stmt.run(userId);
@@ -63,6 +68,9 @@ export async function removeUser(userId: number): Promise<boolean> {
   return false;
 }
 
+// Deletes all expired users from the allowed users list
+// Expired users are those with permission_type 'temporary' and end_date < current date
+// Sends a message to the admin with the list of deleted users
 export async function deleteExpiredUsers(bot: Telegraf): Promise<void> {
   const now = new Date().toISOString();
 
@@ -100,18 +108,29 @@ export async function deleteExpiredUsers(bot: Telegraf): Promise<void> {
   await bot.telegram.sendMessage(ADMIN, message);
 }
 
+// Checks if a user is allowed to use the bot by user ID
+// Returns true if the user is allowed, false otherwise
+// If the user is not found in the allowed users list, they are not allowed
+// This function is used to restrict access to the bot for unauthorized users
 export async function isUserAllowed(userId: number): Promise<boolean> {
   const stmt = db.prepare('SELECT 1 FROM allowed_users WHERE user_id = ?');
 
   return !!stmt.get(userId);
 }
 
+// Retrieves all allowed users from the database
+// Returns an array of AllowedUser objects
+// This function is used to get the list of all users who have access to the bot
 export async function getAllUsers(): Promise<AllowedUser[]> {
   const stmt = db.prepare('SELECT * FROM allowed_users');
 
   return stmt.all() as AllowedUser[];
 }
 
+// Notifies users with expiring access (10 days and 1 day before expiration)
+// Sends a message to the user and the admin with the expiration details
+// If the user has a temporary access that is expiring in 10 days or 1 day, they will receive a notification
+// The admin will also be notified about the expiring users
 export async function notifyExpiringUsers(bot: Telegraf): Promise<void> {
   const users = await getAllUsers();
   const now = new Date();

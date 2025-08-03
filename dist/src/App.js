@@ -76,16 +76,29 @@ function debounceAction(handler, delay = 750) {
 }
 exports.ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
 // Every day at 00:00 check for expired users
-node_cron_1.default.schedule('0 0 * * *', () => {
-    console.log('🕛 Запускається перевірка прострочених користувачів...');
-    (0, userServices_1.deleteExpiredUsers)(bot);
+const deleteExpiredJob = node_cron_1.default.schedule('0 0 * * *', async () => {
+    try {
+        console.log('🕛 Запускається перевірка прострочених користувачів...');
+        await (0, userServices_1.deleteExpiredUsers)(bot);
+        console.log('✅ Перевірка прострочених користувачів завершена.');
+    }
+    catch (error) {
+        console.error('❌ Помилка під час видалення прострочених користувачів:', error);
+    }
 });
 // Every day at 09:00 notify users with expiring access
-node_cron_1.default.schedule('0 9 * * *', () => {
-    console.log('📬 Перевірка на користувачів із закінченням доступу...');
-    (0, userServices_1.notifyExpiringUsers)(bot);
+const notifyJob = node_cron_1.default.schedule('0 9 * * *', async () => {
+    try {
+        console.log('📬 Перевірка на користувачів із закінченням доступу...');
+        await (0, userServices_1.notifyExpiringUsers)(bot);
+        console.log('✅ Перевірка на користувачів із закінченням доступу завершена.');
+    }
+    catch (error) {
+        console.error('❌ Помилка під час перевірки прострочених користувачів:', error);
+    }
 });
-node_cron_1.default.schedule('0 10 * * 1, 3, 5', async () => {
+// Every Monday, Wednesday, and Friday at 10:00 send motivation message
+const motivationJob = node_cron_1.default.schedule('0 10 * * 1, 3, 5', async () => {
     try {
         const users = await (0, userServices_1.getAllUsers)();
         const date = new Date().getDate();
@@ -102,6 +115,12 @@ node_cron_1.default.schedule('0 10 * * 1, 3, 5', async () => {
         console.error('❌ Помилка під час розсилки мотиваційних повідомлень:', error);
     }
 });
+function stopAllCronJobs() {
+    deleteExpiredJob.stop();
+    notifyJob.stop();
+    motivationJob.stop();
+    console.log('🛑 Усі cron завдання зупинено.');
+}
 bot.command('start', async (ctx) => {
     const id = ctx.from.id;
     const username = ctx.from.username;
@@ -368,6 +387,9 @@ bot.action('return_to_menu', debounceAction(async (ctx) => {
     ]);
     await ctx.editMessageText(messageText, keyboard);
 }));
+// Initialize the database and download from Google Drive if available
+// If the download fails, it will create a new database
+// This is done to ensure the bot has a fresh database to work with
 (async () => {
     try {
         console.log('🔽 Завантаження бази даних з Google Drive...');
@@ -383,5 +405,17 @@ bot.action('return_to_menu', debounceAction(async (ctx) => {
     console.log('🤖 Бот запущено!');
 })();
 process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+process.once('SIGTERM', async () => {
+    console.log('Received SIGTERM signal. Initiating graceful shutdown...');
+    stopAllCronJobs();
+    try {
+        await bot.stop('SIGTERM');
+        console.log('Bot and cron jobs have been stopped.');
+        process.exit(0);
+    }
+    catch (error) {
+        console.error('Error during bot shutdown:', error);
+        process.exit(1);
+    }
+});
 //# sourceMappingURL=App.js.map
