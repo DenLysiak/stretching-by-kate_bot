@@ -16,10 +16,10 @@ export function debounceAction(handler: (ctx: Context) => Promise<void>, delay =
     }
 
     recentMenuClicks.add(userId);
+  
     setTimeout(() => recentMenuClicks.delete(userId), delay);
 
     await ctx.answerCbQuery();
-
     await handler(ctx);
   };
 }

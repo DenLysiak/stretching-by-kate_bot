@@ -20,8 +20,8 @@ const videoList = JSON.parse(fs.readFileSync('./data/videoAPI.json', 'utf-8'));
 const fileIdMap = new Map<string, string>();
 const lastVideoMessageMap = new Map<number, number>();
 const dbPath = path.resolve(__dirname, '../../data/users.db');
+const motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 
-export const motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 export let db: Database.Database;
 
 // method to keep track of pending requests

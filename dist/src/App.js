@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ADMIN = exports.db = exports.motivationMessageList = void 0;
+exports.ADMIN = exports.db = void 0;
 const telegraf_1 = require("telegraf");
 const dotenv_1 = __importDefault(require("dotenv"));
 const fs = __importStar(require("fs"));
@@ -55,7 +55,7 @@ const videoList = JSON.parse(fs.readFileSync('./data/videoAPI.json', 'utf-8'));
 const fileIdMap = new Map();
 const lastVideoMessageMap = new Map();
 const dbPath = path_1.default.resolve(__dirname, '../../data/users.db');
-exports.motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
+const motivationMessageList = JSON.parse(fs.readFileSync('./data/motivationAPI.json', 'utf-8'));
 // method to keep track of pending requests
 const pendingRequests = new Map();
 exports.ADMIN = parseInt(process.env.ADMIN_OWNER_ID || '0', 10);
@@ -302,8 +302,8 @@ bot.action('about', (0, debounceAction_1.debounceAction)(async (ctx) => {
     ]));
 }));
 bot.action('motivation', (0, debounceAction_1.debounceAction)(async (ctx) => {
-    const randomNumber = (0, getRandomNum_1.getRandomNumber)(1, exports.motivationMessageList.length);
-    const message = [...exports.motivationMessageList].find((m) => m.messageId === randomNumber);
+    const randomNumber = (0, getRandomNum_1.getRandomNumber)(1, motivationMessageList.length);
+    const message = [...motivationMessageList].find((m) => m.messageId === randomNumber);
     await ctx.editMessageText(`${message.messageText ? message.messageText : 'Тягнись, поки не втягнешся. І тоді тягнись ще!'} 💫`, telegraf_1.Markup.inlineKeyboard([
         [telegraf_1.Markup.button.callback('⮐ Повернутись до меню', 'return_to_menu')]
     ]));
