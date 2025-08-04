@@ -74,8 +74,6 @@ export async function removeUser(userId: number): Promise<boolean> {
 export async function deleteExpiredUsers(bot: Telegraf): Promise<void> {
   const now = new Date().toISOString();
 
-  // STEP 1: First, SELECT the users to be deleted.
-  // This statement returns the list of users for our notification.
   const selectStmt = db.prepare(`
     SELECT * FROM allowed_users 
     WHERE permission_type = 'temporary' 
@@ -89,14 +87,13 @@ export async function deleteExpiredUsers(bot: Telegraf): Promise<void> {
     return;
   }
 
-  // STEP 2: Now, DELETE all of those users.
-  // This statement correctly uses the .run() method because it does not return data.
   const deleteStmt = db.prepare(`
     DELETE FROM allowed_users 
     WHERE permission_type = 'temporary' 
       AND end_date IS NOT NULL 
       AND end_date < ?
   `);
+
   const result = deleteStmt.run(now);
 
   if (result.changes > 0) {

@@ -90,11 +90,11 @@ const asyncMotivationJob = async (bot) => {
     }
 };
 function startAllCronJobs(bot) {
-    // Every day at 00:00 check for expired users
-    deleteExpiredJob = node_cron_1.default.schedule('38 8 * * *', () => asyncDeleteExpiredUsers(bot));
-    // Every day at 09:00 notify users with expiring access
+    // Every day at 10:30 (Kyiv utc+2) check for expired users
+    deleteExpiredJob = node_cron_1.default.schedule('30 7 * * *', () => asyncDeleteExpiredUsers(bot));
+    // Every day at 11:00 (Kyiv utc+2)notify users with expiring access
     notifyJob = node_cron_1.default.schedule('00 8 * * *', () => asyncNotifyJob(bot));
-    // Every Monday, Wednesday, and Friday at 10:00 send motivation message
+    // Every Monday, Wednesday, and Friday at 10:00 (Kyiv utc+2) send motivation message
     motivationJob = node_cron_1.default.schedule('00 7 * * 1,3,5', () => asyncMotivationJob(bot));
     console.log('✅ Усі cron завдання запущено.');
 }

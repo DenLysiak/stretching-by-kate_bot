@@ -51,8 +51,6 @@ async function removeUser(userId) {
 // Sends a message to the admin with the list of deleted users
 async function deleteExpiredUsers(bot) {
     const now = new Date().toISOString();
-    // STEP 1: First, SELECT the users to be deleted.
-    // This statement returns the list of users for our notification.
     const selectStmt = App_1.db.prepare(`
     SELECT * FROM allowed_users 
     WHERE permission_type = 'temporary' 
@@ -64,8 +62,6 @@ async function deleteExpiredUsers(bot) {
         console.log('✅ Немає прострочених користувачів.');
         return;
     }
-    // STEP 2: Now, DELETE all of those users.
-    // This statement correctly uses the .run() method because it does not return data.
     const deleteStmt = App_1.db.prepare(`
     DELETE FROM allowed_users 
     WHERE permission_type = 'temporary' 
