@@ -74,38 +74,40 @@ export async function removeUser(userId: number): Promise<boolean> {
 export async function deleteExpiredUsers(bot: Telegraf): Promise<void> {
   const now = new Date().toISOString();
 
-  const stmt = db.prepare(`
+  // STEP 1: First, SELECT the users to be deleted.
+  // This statement returns the list of users for our notification.
+  const selectStmt = db.prepare(`
+    SELECT * FROM allowed_users 
+    WHERE permission_type = 'temporary' 
+      AND end_date IS NOT NULL 
+      AND end_date < ?
+  `);
+  const expiredUsers = selectStmt.all(now) as AllowedUser[];
+
+  if (expiredUsers.length === 0) {
+    console.log('✅ Немає прострочених користувачів.');
+    return;
+  }
+
+  // STEP 2: Now, DELETE all of those users.
+  // This statement correctly uses the .run() method because it does not return data.
+  const deleteStmt = db.prepare(`
     DELETE FROM allowed_users 
     WHERE permission_type = 'temporary' 
       AND end_date IS NOT NULL 
       AND end_date < ?
   `);
+  const result = deleteStmt.run(now);
 
-  const expiredUsers = stmt.all(now) as AllowedUser[];
+  if (result.changes > 0) {
+    await uploadDatabaseToDrive();
+    
+    const message = `🗑️ Видалено ${result.changes} користувачів із простроченим доступом:\n\n` +
+      expiredUsers.map(u => `• ${u.first_name ?? ''} @${u.username ?? ''} (ID: ${u.user_id})`).join('\n');
 
-  if (expiredUsers.length === 0) {
-    console.log('✅ Немає прострочених користувачів.');
-
-    return;
+    console.log(message);
+    await bot.telegram.sendMessage(ADMIN, message);
   }
-
-  const deleteStmt = db.prepare(`
-    DELETE FROM allowed_users 
-    WHERE user_id = ?
-  `);
-
-  for (const user of expiredUsers) {
-    deleteStmt.run(user.user_id);
-  }
-
-  await uploadDatabaseToDrive();
-
-  const message = `🗑️ Видалено ${expiredUsers.length} користувачів із простроченим доступом:\n\n` +
-    expiredUsers.map(u => `• ${u.first_name ?? ''} @${u.username ?? ''} (ID: ${u.user_id})`).join('\n');
-
-  console.log(message);
-
-  await bot.telegram.sendMessage(ADMIN, message);
 }
 
 // Checks if a user is allowed to use the bot by user ID

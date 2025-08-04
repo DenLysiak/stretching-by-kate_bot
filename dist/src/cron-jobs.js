@@ -40,6 +40,7 @@ exports.startAllCronJobs = startAllCronJobs;
 exports.stopAllCronJobs = stopAllCronJobs;
 const node_cron_1 = __importDefault(require("node-cron"));
 const fs = __importStar(require("fs"));
+const telegraf_1 = require("telegraf");
 const userServices_1 = require("./userServices");
 let deleteExpiredJob;
 let notifyJob;
@@ -72,7 +73,13 @@ const asyncMotivationJob = async (bot) => {
         const motivationMessage = motivationMessageList.find((m) => m.messageId === date);
         const motivationText = motivationMessage?.messageText || 'Тягнись, поки не втягнешся. І тоді тягнись ще! 💫';
         for (const user of users) {
-            bot.telegram.sendMessage(user.user_id, motivationText, { parse_mode: 'HTML' }).catch(err => {
+            bot.telegram.sendMessage(user.user_id, motivationText, { parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [telegraf_1.Markup.button.callback('🤸🏼‍♀️ Розпочати тренування:', 'work_out')],
+                    ],
+                },
+            }).catch(err => {
                 console.error(`❗ Не вдалося надіслати нагадування користувачу ${user.user_id}:`, err);
             });
         }
@@ -84,11 +91,11 @@ const asyncMotivationJob = async (bot) => {
 };
 function startAllCronJobs(bot) {
     // Every day at 00:00 check for expired users
-    deleteExpiredJob = node_cron_1.default.schedule('16 8 * * *', () => asyncDeleteExpiredUsers(bot));
+    deleteExpiredJob = node_cron_1.default.schedule('38 8 * * *', () => asyncDeleteExpiredUsers(bot));
     // Every day at 09:00 notify users with expiring access
-    notifyJob = node_cron_1.default.schedule('17 8 * * *', () => asyncNotifyJob(bot));
+    notifyJob = node_cron_1.default.schedule('00 8 * * *', () => asyncNotifyJob(bot));
     // Every Monday, Wednesday, and Friday at 10:00 send motivation message
-    motivationJob = node_cron_1.default.schedule('19 8 * * 1,3,5', () => asyncMotivationJob(bot));
+    motivationJob = node_cron_1.default.schedule('00 7 * * 1,3,5', () => asyncMotivationJob(bot));
     console.log('✅ Усі cron завдання запущено.');
 }
 function stopAllCronJobs() {
